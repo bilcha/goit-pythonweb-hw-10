@@ -1,0 +1,6 @@
+contact_schema_first_name = "Name of the contact"
+contact_schema_last_name = "Last name of the contact"
+contact_schema_email = "Email of the contact"
+contact_schema_phone = "Phone number of the contact"
+contact_schema_bday = "Birthdate of the contact"
+contact_schema_additional_data = "Additional Data(Optional)"
