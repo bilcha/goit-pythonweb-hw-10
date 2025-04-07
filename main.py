@@ -3,13 +3,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.db import get_db
-from src.routes import contacts
+from src.routes.v1 import contacts, auth_routes, users_routes
 
 
 app = FastAPI()
 
-app.include_router(contacts.router, prefix="/api")
-
+app.include_router(contacts.router, prefix="/api/v1", tags=["contacts"])
+app.include_router(auth_routes.router, prefix="/api/v1", tags=["auth"])
+app.include_router(
+    users_routes.router, prefix="/api/v1", tags=["users"]
+) 
 
 @app.get("/")
 def read_root(request: Request):
