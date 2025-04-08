@@ -8,12 +8,14 @@ import redis.asyncio as redis
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from libgravatar import Gravatar
 
 from src.conf.config import settings
 from src.entity.models import User
 from src.repositories.refresh_token_repo import RefreshTokenRepository
 from src.repositories.users_repo import UserRepository
 from src.schemas.user import UserCreate
+
 
 redis_client = redis.from_url(settings.REDIS_URL)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -25,17 +27,17 @@ class AuthService:
         self.user_repository = UserRepository(self.db)
         self.refresh_token_repository = RefreshTokenRepository(self.db)
 
-    def _hash_password(self, password: str) -> str: 
+    def _hash_password(self, password: str) -> str:  # noqa
         salt = bcrypt.gensalt()
         hashed_password = bcrypt.hashpw(password.encode(), salt)
         return hashed_password.decode()
 
     def _verify_password(
         self, plain_password: str, hashed_password: str
-    ) -> bool: 
+    ) -> bool:  # noqa
         return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
-    def _hash_token(self, token: str):
+    def _hash_token(self, token: str):  # noqa
         return hashlib.sha256(token.encode()).hexdigest()
 
     async def authenticate(self, username: str, password: str) -> User:
@@ -44,6 +46,12 @@ class AuthService:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
+            )
+
+        if not user.confirmed:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Електронна адреса не підтверджена",
             )
 
         if not self._verify_password(password, user.hash_password):
@@ -59,8 +67,21 @@ class AuthService:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="User already exists"
             )
+        if await self.user_repository.get_user_by_email(str(user_data.email)):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Email already exists"
+            )
+        avatar = None
+        try:
+            g = Gravatar(user_data.email)
+            avatar = g.get_image()
+        except Exception as e:
+            print(e)
+
         hashed_password = self._hash_password(user_data.password)
-        user = await self.user_repository.create_user(user_data, hashed_password)
+        user = await self.user_repository.create_user(
+            user_data, hashed_password, avatar
+        )
         return user
 
     def create_access_token(self, username: str) -> str:
@@ -94,7 +115,7 @@ class AuthService:
             return payload
         except jwt.PyJWTError:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong Token"
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Token wrong"
             )
 
     async def get_current_user(self, token: str = Depends(oauth2_scheme)) -> User:
@@ -148,8 +169,9 @@ class AuthService:
     async def revoke_access_token(self, token: str) -> None:
         payload = self.decode_and_validate_access_token(token)
         exp = payload.get("exp")
+        print(exp - datetime.now(timezone.utc).timestamp())
         if exp:
             await redis_client.setex(
-                f"bl:{token}", exp - datetime.now(timezone.utc).timestamp(), "1"
+                f"bl:{token}", int(exp - datetime.now(timezone.utc).timestamp()), "1"
             )
         return None

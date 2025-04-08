@@ -1,6 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import Date, Integer, String, DateTime, func, ForeignKey, Text
+from enum import Enum
+from sqlalchemy import (
+    String,
+    DateTime,
+    func,
+    ForeignKey,
+    Date,
+    Text,
+    Boolean,
+    Enum as SqlEnum,
+)
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -9,7 +19,7 @@ class Base(DeclarativeBase):
 
 class Contact(Base):
     __tablename__ = "contacts"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
@@ -18,9 +28,12 @@ class Contact(Base):
     aditional_data: Mapped[str] = mapped_column(String(500), nullable=True)
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
-    user: Mapped["User"] = relationship("User", backref="todos", lazy="joined")
+    user: Mapped["User"] = relationship("User", backref="contacts", lazy="joined")
 
-
+class UserRole(str, Enum):
+    USER = "USER"
+    MODERATOR = "MODERATOR"
+    ADMIN = "ADMIN"
 
 class User(Base):
     __tablename__ = "users"
@@ -28,6 +41,12 @@ class User(Base):
     username: Mapped[str] = mapped_column(nullable=False, unique=True)
     email: Mapped[str] = mapped_column(nullable=False, unique=True)
     hash_password: Mapped[str] = mapped_column(nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        SqlEnum(UserRole), default=UserRole.USER, nullable=False
+    )
+    avatar: Mapped[str] = mapped_column(String(255), nullable=True)
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         "RefreshToken", back_populates="user"
     )
